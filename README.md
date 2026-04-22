@@ -2,7 +2,7 @@
 
 Reverse proxy that translates legacy mobile-client requests into calls against new backend APIs. Routing, backends, and transform rules live in PostgreSQL and are swapped atomically in memory.
 
-Quarkus 3.30 / Java 25 / JVM mode. Ported from a Spring Boot 4 service (same HTTP contract, same schema, same config semantics).
+Quarkus 3.30 / Java 25 / JVM mode.
 
 ## Stack
 
