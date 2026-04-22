@@ -28,10 +28,50 @@ class TransformValidatorTest {
 
     @Test
     void rejectsInvalidLocationPrefix() {
-        RouteDefinition route = route("r", "/x", tx("header:x", "query:x"));
+        RouteDefinition route = route("r", "/x", tx("cookie:x", "query:x"));
         assertThatThrownBy(() -> validator.validate(List.of(route)))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("header");
+                .hasMessageContaining("cookie");
+    }
+
+    @Test
+    void acceptsHeaderLocations() {
+        RouteDefinition routeTo = route("r1", "/x",
+                tx("query:token", "header:Authorization"));
+        RouteDefinition routeFrom = route("r2", "/x",
+                tx("header:X-API-Key", "body:/apiKey"));
+        assertThatCode(() -> validator.validate(List.of(routeTo, routeFrom)))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void rejectsEmptyHeaderNameOnFrom() {
+        RouteDefinition route = route("r", "/x", tx("header:", "query:x"));
+        assertThatThrownBy(() -> validator.validate(List.of(route)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("header name must not be empty");
+    }
+
+    @Test
+    void rejectsEmptyHeaderNameOnTo() {
+        RouteDefinition route = route("r", "/x", tx("query:x", "header:"));
+        assertThatThrownBy(() -> validator.validate(List.of(route)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("header name must not be empty");
+    }
+
+    @Test
+    void bodyToHeaderDoesNotRequireProduces() {
+        RouteDefinition route = route("r", "/x", tx("body:/apiKey", "header:X-API-Key"));
+        assertThatCode(() -> validator.validate(List.of(route)))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void headerToBodyDoesNotRequireProducesForTopLevel() {
+        RouteDefinition route = route("r", "/x", tx("header:X-API-Key", "body:/apiKey"));
+        assertThatCode(() -> validator.validate(List.of(route)))
+                .doesNotThrowAnyException();
     }
 
     @Test

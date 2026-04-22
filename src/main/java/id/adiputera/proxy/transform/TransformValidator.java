@@ -47,6 +47,14 @@ public class TransformValidator {
                         ref + ": 'to' may only be omitted when 'from' is a body reference");
             }
 
+            if (fromLoc == Location.HEADER && (t.getFromName() == null || t.getFromName().isBlank())) {
+                throw new IllegalStateException(ref + ": 'from' header name must not be empty");
+            }
+            if (!t.isDrop() && toLoc == Location.HEADER
+                    && (t.getToName() == null || t.getToName().isBlank())) {
+                throw new IllegalStateException(ref + ": 'to' header name must not be empty");
+            }
+
             boolean usesNested = false;
             boolean usesRoot = false;
 

@@ -77,26 +77,33 @@ public class ProxyService {
 
         Map<String, String[]> rawQueryParams = toArrayMap(queryParams);
 
+        MultivaluedMap<String, String> inboundHeaders = headers.getRequestHeaders();
+
         TransformOrchestrator.Result tr = transformOrchestrator.apply(
                 route,
                 matchResult.pathVariables(),
                 rawQueryParams,
                 requestBody,
                 contentType,
+                inboundHeaders,
                 backend.getBaseUrl());
 
         log.debug("Forwarding to: {}", tr.targetUri());
 
         HttpRequest.Builder reqBuilder = HttpRequest.newBuilder(tr.targetUri());
 
-        MultivaluedMap<String, String> inboundHeaders = headers.getRequestHeaders();
         Set<String> stripSet = new HashSet<>();
         for (String name : snapshot.stripHeaders()) {
             stripSet.add(name.toLowerCase(Locale.ROOT));
         }
+        boolean addHeadersHasContentType = tr.addHeaders().keySet().stream()
+                .anyMatch(n -> "content-type".equals(n.toLowerCase(Locale.ROOT)));
         for (Map.Entry<String, List<String>> entry : inboundHeaders.entrySet()) {
             String lower = entry.getKey().toLowerCase(Locale.ROOT);
             if (stripSet.contains(lower) || DISALLOWED_REQUEST_HEADERS.contains(lower)) {
+                continue;
+            }
+            if (tr.removeHeaders().contains(lower)) {
                 continue;
             }
             if (tr.forwardContentType() != null && "content-type".equals(lower)) {
@@ -110,8 +117,15 @@ public class ProxyService {
                 }
             }
         }
-        if (tr.forwardContentType() != null) {
+        if (tr.forwardContentType() != null && !addHeadersHasContentType) {
             reqBuilder.header("Content-Type", tr.forwardContentType().toString());
+        }
+        for (Map.Entry<String, String> entry : tr.addHeaders().entrySet()) {
+            try {
+                reqBuilder.header(entry.getKey(), entry.getValue());
+            } catch (IllegalArgumentException ignored) {
+                // Java HttpClient rejects some headers; drop those silently.
+            }
         }
 
         HttpRequest.BodyPublisher publisher = hasBody(method) && tr.forwardBody() != null && tr.forwardBody().length > 0

@@ -58,7 +58,7 @@ Config is stored across four tables:
 - `proxy_globals` (single row, `id=1`) — global connect/read timeouts, forward/strip header allowlists.
 - `proxy_backends` — `(id, base_url, connect_timeout_ms?, read_timeout_ms?)`. Timeouts null → inherit globals.
 - `proxy_routes` — `(id, source, target, backend_id, methods[], produces?)`. `source` and `target` are path templates; `{name}` captures/substitutes a path variable; trailing `/**` is a wildcard suffix.
-- `proxy_route_transforms` — `(route_id, ordinal, from_ref, to_ref?)`. Refs use `location:name` grammar where location is `path`, `query`, or `body`, and `name` is a parameter name for path/query or an RFC 6901 JSON Pointer for body. `to_ref` null on a `body:` source means "drop".
+- `proxy_route_transforms` — `(route_id, ordinal, from_ref, to_ref?)`. Refs use `location:name` grammar where location is `path`, `query`, `body`, or `header`, and `name` is a parameter name for path/query, an RFC 6901 JSON Pointer for body, or a header name (case-insensitive on read, casing preserved on write) for header. `to_ref` null on a `body:` source means "drop"; drop is not supported for other locations — remove inbound headers via `proxy_globals.strip_headers` instead. When a transform writes to a header name that the inbound request also carries, the transform value overrides the inbound one.
 
 On startup and on every admin reload, `ConfigLoader` reads all four tables in one read-only transaction, validates the transforms (`TransformValidator`), compiles source patterns to regex (`RouteCompiler`), builds per-backend `HttpClient` instances, and publishes an immutable `ConfigSnapshot`. Request handlers read the snapshot once at entry and finish consistently even if a reload swaps the reference mid-flight.
 
@@ -66,8 +66,8 @@ On startup and on every admin reload, `ConfigLoader` reads all four tables in on
 
 1. JAX-RS `ProxyResource` (`@Path("/{any:.*}")`) receives any method
 2. `RouteMatcher` finds the compiled route (method → path → required query params disambiguation)
-3. `TransformOrchestrator` walks `route.transforms` mutating path/query maps and (if a body-touching transform exists) a parsed `JsonNode`; serializes the outbound body through the matching `BodyCodec` (`JsonBodyCodec` or `FormUrlEncodedBodyCodec`); assembles the target URI
-4. `ProxyService` forwards via the backend's `HttpClient`, filtering headers on both sides (inbound strip list + JDK-restricted names; outbound drop HTTP/2 pseudo-headers)
+3. `TransformOrchestrator` walks `route.transforms` mutating path/query maps, a header add/remove pair, and (if a body-touching transform exists) a parsed `JsonNode`; serializes the outbound body through the matching `BodyCodec` (`JsonBodyCodec` or `FormUrlEncodedBodyCodec`); assembles the target URI
+4. `ProxyService` forwards via the backend's `HttpClient`, filtering headers on both sides (inbound strip list + transform-remove list + JDK-restricted names; outbound drop HTTP/2 pseudo-headers) and applying any headers written by transforms
 5. Response status, body, and headers are returned to the caller
 
 ## Admin
@@ -94,7 +94,7 @@ All errors return JSON of the shape:
 
 ## Sample resources (for demo/testing)
 
-`id.adiputera.proxy.sample.*` hosts in-process JAX-RS resources matching every seeded route's target path: `ProductResource`, `V2ProductResource`, `OrderResource`, `AuthResource`, `NewServicesResource`. Each echoes what it received so transforms are observable.
+`id.adiputera.proxy.sample.*` hosts in-process JAX-RS resources matching every seeded route's target path: `ProductResource`, `V2ProductResource`, `OrderResource`, `AuthResource`, `NewAuthResource`, `NewServicesResource`. Most echo what they received so transforms are observable; `NewAuthResource` additionally enforces its contract (401 if `X-API-Key` is missing) so header-transform success paths can be distinguished from silent no-ops.
 
 To loop the proxy through these resources, point the backends at self:
 
@@ -112,6 +112,19 @@ curl -X POST -H 'Content-Type: application/x-www-form-urlencoded' \
      -d 'username=bob&password=x' \
      http://localhost:8080/form-login
 # → {"path":"/auth/token","body":{"user":"bob","credentials":{"secret":"x"}}}
+
+# Legacy client sends apiKey in the body; new backend expects it in X-API-Key.
+curl -X POST -H 'Content-Type: application/json' \
+     -d '{"apiKey":"secret-123","username":"bob"}' \
+     http://localhost:8080/header-login
+# → {"path":"/auth/v2/token","apiKey":"secret-123","body":{"user":"bob"},"token":"issued-for-secret-123"}
+
+# Omitting the apiKey body field leaves the outbound request without X-API-Key;
+# NewAuthResource enforces the contract and returns 401.
+curl -i -X POST -H 'Content-Type: application/json' \
+     -d '{"username":"bob"}' \
+     http://localhost:8080/header-login
+# → 401 {"error":"missing_api_key",...}
 ```
 
 ## Testing
@@ -126,7 +139,7 @@ Layout:
 - **`ProxyServiceTest`** — service layer behavior matrix, backend mocked with WireMock.
 - **`@QuarkusTest` integration** — `ConfigLoaderTest`, `ConfigProviderReloadTest` hit the real Postgres.
 - **`ProxyResourceIntegrationTest`** — error paths through the JAX-RS surface.
-- **`ProxyEndToEndTest`** — rewrites `proxy_backends` to point at the test server itself, reloads, exercises every seeded route through the full wire (JAX-RS → ProxyService → HttpClient → loopback → sample resource), and restores URLs on teardown.
+- **`ProxyEndToEndTest`** — rewrites `proxy_backends` to point at the test server itself, reloads, exercises every seeded route through the full wire (JAX-RS → ProxyService → HttpClient → loopback → sample resource), including the header-transform route (`/header-login → /auth/v2/token`) in both success and 401 paths, and restores URLs on teardown.
 
 Integration tests require `quarkus_proxy_test` to exist locally.
 

@@ -217,6 +217,112 @@ class TransformOrchestratorTest {
     }
 
     @Test
+    void queryToHeader() {
+        RouteDefinition route = route("r", "/auth/token",
+                tx("query:token", "header:Authorization"));
+        TransformOrchestrator.Result r = apply(route, Map.of(),
+                Map.of("token", new String[]{"abc123"}), null, null);
+
+        assertThat(r.addHeaders()).containsEntry("Authorization", "abc123");
+        assertThat(r.removeHeaders()).contains("authorization");
+        assertThat(r.targetUri().toString()).isEqualTo("https://be.test/auth/token");
+    }
+
+    @Test
+    void pathToHeader() {
+        RouteDefinition route = route("r", "/auth/token",
+                tx("path:userId", "header:X-User-Id"));
+        TransformOrchestrator.Result r = apply(route,
+                Map.of("userId", "42"), Map.of(), null, null);
+
+        assertThat(r.addHeaders()).containsEntry("X-User-Id", "42");
+        assertThat(r.removeHeaders()).contains("x-user-id");
+        assertThat(r.targetUri().toString()).isEqualTo("https://be.test/auth/token");
+    }
+
+    @Test
+    void bodyToHeader() {
+        RouteDefinition route = route("r", "/auth/token", "application/json",
+                tx("body:/apiKey", "header:X-API-Key"));
+
+        TransformOrchestrator.Result r = apply(route, Map.of(), Map.of(),
+                "{\"apiKey\":\"secret\",\"name\":\"A\"}".getBytes(StandardCharsets.UTF_8),
+                MediaType.APPLICATION_JSON_TYPE);
+
+        assertThat(r.addHeaders()).containsEntry("X-API-Key", "secret");
+        assertThat(r.removeHeaders()).contains("x-api-key");
+        assertThat(new String(r.forwardBody(), StandardCharsets.UTF_8))
+                .isEqualTo("{\"name\":\"A\"}");
+    }
+
+    @Test
+    void headerToQuery() {
+        RouteDefinition route = route("r", "/search",
+                tx("header:X-Search", "query:q"));
+        TransformOrchestrator.Result r = apply(route, Map.of(), Map.of(), null, null,
+                Map.of("X-Search", java.util.List.of("shoes")));
+
+        assertThat(r.targetUri().toString()).isEqualTo("https://be.test/search?q=shoes");
+        assertThat(r.removeHeaders()).contains("x-search");
+    }
+
+    @Test
+    void headerToQueryIsCaseInsensitiveOnRead() {
+        RouteDefinition route = route("r", "/search",
+                tx("header:x-search", "query:q"));
+        TransformOrchestrator.Result r = apply(route, Map.of(), Map.of(), null, null,
+                Map.of("X-Search", java.util.List.of("shoes")));
+
+        assertThat(r.targetUri().toString()).isEqualTo("https://be.test/search?q=shoes");
+    }
+
+    @Test
+    void headerToPath() {
+        RouteDefinition route = route("r", "/users/{userId}",
+                tx("header:X-User-Id", "path:userId"));
+        TransformOrchestrator.Result r = apply(route, Map.of(), Map.of(), null, null,
+                Map.of("X-User-Id", java.util.List.of("42")));
+
+        assertThat(r.targetUri().toString()).isEqualTo("https://be.test/users/42");
+        assertThat(r.removeHeaders()).contains("x-user-id");
+    }
+
+    @Test
+    void headerToBody() {
+        RouteDefinition route = route("r", "/submit", "application/json",
+                tx("header:X-Trace-Id", "body:/trace/id"));
+        TransformOrchestrator.Result r = apply(route, Map.of(), Map.of(),
+                "{}".getBytes(StandardCharsets.UTF_8),
+                MediaType.APPLICATION_JSON_TYPE,
+                Map.of("X-Trace-Id", java.util.List.of("t-99")));
+
+        assertThat(new String(r.forwardBody(), StandardCharsets.UTF_8))
+                .isEqualTo("{\"trace\":{\"id\":\"t-99\"}}");
+        assertThat(r.removeHeaders()).contains("x-trace-id");
+    }
+
+    @Test
+    void headerToHeaderRename() {
+        RouteDefinition route = route("r", "/auth/token",
+                tx("header:X-Legacy-Token", "header:Authorization"));
+        TransformOrchestrator.Result r = apply(route, Map.of(), Map.of(), null, null,
+                Map.of("X-Legacy-Token", java.util.List.of("bearer-xyz")));
+
+        assertThat(r.addHeaders()).containsEntry("Authorization", "bearer-xyz");
+        assertThat(r.removeHeaders()).contains("x-legacy-token", "authorization");
+    }
+
+    @Test
+    void headerMissingInboundValueNoOp() {
+        RouteDefinition route = route("r", "/auth/token",
+                tx("header:X-API-Key", "query:apiKey"));
+        TransformOrchestrator.Result r = apply(route, Map.of(), Map.of(), null, null, Map.of());
+
+        assertThat(r.targetUri().toString()).isEqualTo("https://be.test/auth/token");
+        assertThat(r.removeHeaders()).contains("x-api-key");
+    }
+
+    @Test
     void passthroughQueryParamRemainsOnOutboundUri() {
         RouteDefinition route = route("r", "/products/{code}",
                 tx("query:code", "path:code"));
@@ -233,7 +339,16 @@ class TransformOrchestratorTest {
                                                Map<String, String[]> queryParams,
                                                byte[] body,
                                                MediaType contentType) {
-        return orchestrator.apply(route, pathVars, queryParams, body, contentType, "https://be.test");
+        return apply(route, pathVars, queryParams, body, contentType, Map.of());
+    }
+
+    private TransformOrchestrator.Result apply(RouteDefinition route,
+                                               Map<String, String> pathVars,
+                                               Map<String, String[]> queryParams,
+                                               byte[] body,
+                                               MediaType contentType,
+                                               Map<String, java.util.List<String>> headers) {
+        return orchestrator.apply(route, pathVars, queryParams, body, contentType, headers, "https://be.test");
     }
 
     private static RouteDefinition route(String id, String target, ParamTransform... transforms) {

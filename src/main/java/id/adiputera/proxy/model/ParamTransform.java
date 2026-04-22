@@ -42,6 +42,11 @@ public class ParamTransform {
                 || (!isDrop() && getToLocation() == Location.BODY);
     }
 
+    public boolean touchesHeader() {
+        return getFromLocation() == Location.HEADER
+                || (!isDrop() && getToLocation() == Location.HEADER);
+    }
+
     private static String splitPrefix(String value) {
         int colon = value.indexOf(':');
         if (colon < 0) {

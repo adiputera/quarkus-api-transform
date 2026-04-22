@@ -182,4 +182,28 @@ class ProxyEndToEndTest {
                 .body("body.credentials.secret", equalTo("secret123"));
     }
 
+    @Test
+    void headerAuthLoginMovesBodyFieldIntoHeader() {
+        given()
+                .contentType("application/json")
+                .body("{\"apiKey\":\"secret-123\",\"username\":\"bob\"}")
+                .when().post("/header-login")
+                .then().statusCode(200)
+                .body("path", equalTo("/auth/v2/token"))
+                .body("apiKey", equalTo("secret-123"))
+                .body("token", equalTo("issued-for-secret-123"))
+                .body("body.user", equalTo("bob"))
+                .body("body.apiKey", nullValue());
+    }
+
+    @Test
+    void headerAuthLoginRejectsWhenApiKeyMissing() {
+        given()
+                .contentType("application/json")
+                .body("{\"username\":\"bob\"}")
+                .when().post("/header-login")
+                .then().statusCode(401)
+                .body("error", equalTo("missing_api_key"));
+    }
+
 }

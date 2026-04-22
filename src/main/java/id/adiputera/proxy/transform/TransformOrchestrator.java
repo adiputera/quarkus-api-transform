@@ -18,8 +18,12 @@ import jakarta.ws.rs.core.Response;
 
 import java.net.URI;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 @ApplicationScoped
 public class TransformOrchestrator {
@@ -32,13 +36,18 @@ public class TransformOrchestrator {
         this.urlBuilder = urlBuilder;
     }
 
-    public record Result(URI targetUri, byte[] forwardBody, MediaType forwardContentType) {}
+    public record Result(URI targetUri,
+                         byte[] forwardBody,
+                         MediaType forwardContentType,
+                         Map<String, String> addHeaders,
+                         Set<String> removeHeaders) {}
 
     public Result apply(RouteDefinition route,
                         Map<String, String> matchedPathVars,
                         Map<String, String[]> rawQueryParams,
                         byte[] requestBody,
                         MediaType requestContentType,
+                        Map<String, List<String>> inboundHeaders,
                         String backendBaseUrl) {
 
         boolean hasBodyTransforms = route.getTransforms().stream().anyMatch(ParamTransform::touchesBody);
@@ -71,9 +80,13 @@ public class TransformOrchestrator {
         Map<String, String> workQuery = flatten(rawQueryParams);
         Map<String, String> outPath = new HashMap<>(workPath);
         Map<String, String> outQuery = new LinkedHashMap<>();
+        Map<String, List<String>> workHeaders = flattenHeaders(inboundHeaders);
+        Map<String, String> addHeaders = new LinkedHashMap<>();
+        Set<String> removeHeaders = new HashSet<>();
 
         for (ParamTransform t : route.getTransforms()) {
-            doc = applyOne(route, t, workPath, workQuery, outPath, outQuery, doc);
+            doc = applyOne(route, t, workPath, workQuery, outPath, outQuery,
+                    workHeaders, addHeaders, removeHeaders, doc);
         }
 
         for (Map.Entry<String, String> entry : workQuery.entrySet()) {
@@ -97,7 +110,7 @@ public class TransformOrchestrator {
 
         URI targetUri = urlBuilder.buildTargetUrl(backendBaseUrl, route.getTarget(), outPath, outQuery);
 
-        return new Result(targetUri, forwardBody, forwardContentType);
+        return new Result(targetUri, forwardBody, forwardContentType, addHeaders, removeHeaders);
     }
 
     private JsonNode applyOne(RouteDefinition route,
@@ -106,6 +119,9 @@ public class TransformOrchestrator {
                               Map<String, String> workQuery,
                               Map<String, String> outPath,
                               Map<String, String> outQuery,
+                              Map<String, List<String>> workHeaders,
+                              Map<String, String> addHeaders,
+                              Set<String> removeHeaders,
                               JsonNode doc) {
         Location from = t.getFromLocation();
         Location to = t.getToLocation();
@@ -138,6 +154,10 @@ public class TransformOrchestrator {
                                     TextNode.valueOf(v));
                         }
                     }
+                    case HEADER -> {
+                        String v = workQuery.remove(fromName);
+                        writeHeader(toName, v, addHeaders, removeHeaders);
+                    }
                 }
             }
             case PATH -> {
@@ -166,6 +186,13 @@ public class TransformOrchestrator {
                             outPath.remove(fromName);
                         }
                     }
+                    case HEADER -> {
+                        String v = workPath.get(fromName);
+                        if (v != null) {
+                            outPath.remove(fromName);
+                            writeHeader(toName, v, addHeaders, removeHeaders);
+                        }
+                    }
                 }
             }
             case BODY -> {
@@ -189,10 +216,67 @@ public class TransformOrchestrator {
                             doc = JsonPointers.setAt(doc, JsonPointer.compile(normalizePointer(toName)), copy);
                         }
                     }
+                    case HEADER -> {
+                        String v = read == null || read.isMissingNode() ? null : read.asText(null);
+                        doc = JsonPointers.removeAt(doc, fromPtr);
+                        writeHeader(toName, v, addHeaders, removeHeaders);
+                    }
+                }
+            }
+            case HEADER -> {
+                String v = readHeader(fromName, workHeaders, removeHeaders);
+                switch (to) {
+                    case PATH -> {
+                        if (v != null) outPath.put(toName, v);
+                    }
+                    case QUERY -> {
+                        if (v != null) outQuery.put(toName, v);
+                    }
+                    case BODY -> {
+                        if (v != null) {
+                            doc = JsonPointers.setAt(doc, JsonPointer.compile(normalizePointer(toName)),
+                                    TextNode.valueOf(v));
+                        }
+                    }
+                    case HEADER -> writeHeader(toName, v, addHeaders, removeHeaders);
                 }
             }
         }
         return doc;
+    }
+
+    private static String readHeader(String name,
+                                     Map<String, List<String>> workHeaders,
+                                     Set<String> removeHeaders) {
+        String key = name.toLowerCase(Locale.ROOT);
+        removeHeaders.add(key);
+        List<String> values = workHeaders.remove(key);
+        if (values == null || values.isEmpty()) {
+            return null;
+        }
+        return values.get(0);
+    }
+
+    private static void writeHeader(String name,
+                                    String value,
+                                    Map<String, String> addHeaders,
+                                    Set<String> removeHeaders) {
+        removeHeaders.add(name.toLowerCase(Locale.ROOT));
+        if (value != null) {
+            addHeaders.put(name, value);
+        }
+    }
+
+    private static Map<String, List<String>> flattenHeaders(Map<String, List<String>> raw) {
+        Map<String, List<String>> out = new LinkedHashMap<>();
+        if (raw == null) {
+            return out;
+        }
+        for (Map.Entry<String, List<String>> e : raw.entrySet()) {
+            if (e.getKey() == null) continue;
+            out.put(e.getKey().toLowerCase(Locale.ROOT), e.getValue());
+        }
+        return out;
     }
 
     private static Map<String, String> flatten(Map<String, String[]> raw) {

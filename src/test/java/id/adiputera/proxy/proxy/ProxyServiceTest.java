@@ -379,6 +379,58 @@ class ProxyServiceTest {
     }
 
     @Test
+    void bodyToHeaderLandsOnOutboundRequest() throws Exception {
+        ProxyService svc = proxyServiceFor(route("r", "/header-login", "/auth/token", List.of("POST"),
+                "application/json",
+                tx("body:/apiKey", "header:X-API-Key")));
+
+        wireMock.stubFor(post(urlEqualTo("/auth/token"))
+                .withHeader("X-API-Key", equalTo("secret123"))
+                .withRequestBody(equalToJson("{\"user\":\"bob\"}"))
+                .willReturn(aResponse().withStatus(200)));
+
+        svc.proxy("POST", uriInfo("/header-login", Map.of()),
+                headers("application/json", Map.of()),
+                "{\"apiKey\":\"secret123\",\"user\":\"bob\"}".getBytes(StandardCharsets.UTF_8));
+
+        wireMock.verify(postRequestedFor(urlEqualTo("/auth/token"))
+                .withHeader("X-API-Key", equalTo("secret123")));
+    }
+
+    @Test
+    void headerTransformOverridesInboundHeaderOfSameName() throws Exception {
+        ProxyService svc = proxyServiceFor(route("r", "/header-login", "/auth/token", List.of("POST"),
+                "application/json",
+                tx("body:/apiKey", "header:Authorization")));
+
+        wireMock.stubFor(post(urlEqualTo("/auth/token"))
+                .willReturn(aResponse().withStatus(200)));
+
+        svc.proxy("POST", uriInfo("/header-login", Map.of()),
+                headers("application/json", Map.of("Authorization", "Bearer OLD")),
+                "{\"apiKey\":\"NEW\"}".getBytes(StandardCharsets.UTF_8));
+
+        wireMock.verify(postRequestedFor(urlEqualTo("/auth/token"))
+                .withHeader("Authorization", equalTo("NEW")));
+    }
+
+    @Test
+    void headerToQueryMovesInboundHeaderToUrl() throws Exception {
+        ProxyService svc = proxyServiceFor(route("r", "/api", "/api", List.of("GET"),
+                tx("header:X-Search", "query:q")));
+
+        wireMock.stubFor(get(urlEqualTo("/api?q=shoes"))
+                .willReturn(aResponse().withStatus(200)));
+
+        svc.proxy("GET", uriInfo("/api", Map.of()),
+                headers(null, Map.of("X-Search", "shoes")),
+                null);
+
+        wireMock.verify(anyRequestedFor(urlEqualTo("/api?q=shoes"))
+                .withHeader("X-Search", absent()));
+    }
+
+    @Test
     void backendSuccessResponseBodyIsReturnedAsIs() throws Exception {
         ProxyService svc = proxyServiceFor(route("r", "/resource", "/api/resource", List.of("POST")));
         String responseBody = "{\"id\":42}";
