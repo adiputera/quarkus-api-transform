@@ -9,16 +9,31 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
+/**
+ * REST endpoint for administrative actions such as configuration reloading.
+ *
+ * @author Yusuf F. Adiputera
+ */
 @Path("/admin/config/reload")
 @ApplicationScoped
 public class AdminResource {
 
     private final ConfigProvider configProvider;
 
+    /**
+     * Constructs a new AdminResource with the given configuration provider.
+     *
+     * @param configProvider The configuration provider.
+     */
     public AdminResource(ConfigProvider configProvider) {
         this.configProvider = configProvider;
     }
 
+    /**
+     * Reloads active proxy route and backend configurations.
+     *
+     * @return A response containing the reload result details.
+     */
     @POST
     @Produces(MediaType.APPLICATION_JSON)
     public Response reload() {

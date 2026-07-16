@@ -17,18 +17,36 @@ import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Sample product controller for testing GET/POST proxying and transformations.
+ *
+ * @author Yusuf F. Adiputera
+ */
 @Path("/products")
 @ApplicationScoped
 public class ProductResource {
 
     private final ObjectMapper mapper = new ObjectMapper();
 
+    /**
+     * Lists products.
+     *
+     * @param uriInfo The URI info context.
+     * @return A map echoing request details.
+     */
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     public Map<String, Object> list(@Context UriInfo uriInfo) {
         return echo("/products", uriInfo, null, null);
     }
 
+    /**
+     * Searches products with a query parameter.
+     *
+     * @param q       The search keyword.
+     * @param uriInfo The URI info context.
+     * @return A map echoing search parameters.
+     */
     @GET
     @Path("/search")
     @Produces(MediaType.APPLICATION_JSON)
@@ -38,6 +56,13 @@ public class ProductResource {
         return r;
     }
 
+    /**
+     * Gets a specific product by its code.
+     *
+     * @param code    The product code.
+     * @param uriInfo The URI info context.
+     * @return A map echoing product code.
+     */
     @GET
     @Path("/{code}")
     @Produces(MediaType.APPLICATION_JSON)
@@ -47,6 +72,15 @@ public class ProductResource {
         return r;
     }
 
+    /**
+     * Updates a product by its code with a payload body.
+     *
+     * @param code    The product code.
+     * @param body    The request body.
+     * @param uriInfo The URI info context.
+     * @return A map echoing update details.
+     * @throws IOException if JSON parsing of the body fails.
+     */
     @POST
     @Path("/{code}")
     @Produces(MediaType.APPLICATION_JSON)
@@ -57,6 +91,15 @@ public class ProductResource {
         return r;
     }
 
+    /**
+     * Helper method to format echo responses.
+     *
+     * @param path     The endpoint path.
+     * @param uriInfo  The URI info context.
+     * @param extraKey Optional extra key name.
+     * @param body     Optional request payload body.
+     * @return A map structure of the request details.
+     */
     Map<String, Object> echo(String path, UriInfo uriInfo, String extraKey, byte[] body) {
         Map<String, Object> r = new LinkedHashMap<>();
         r.put("path", path);

@@ -16,12 +16,24 @@ import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Sample order controller for testing GET and POST order endpoints with query parameters.
+ *
+ * @author Yusuf F. Adiputera
+ */
 @Path("/orders")
 @ApplicationScoped
 public class OrderResource {
 
     private final ObjectMapper mapper = new ObjectMapper();
 
+    /**
+     * Lists orders for a given user ID query parameter.
+     *
+     * @param userId  The user ID from user_id query param.
+     * @param uriInfo The URI info context.
+     * @return A map echoing the order listing details.
+     */
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     public Map<String, Object> list(@QueryParam("user_id") String userId, @Context UriInfo uriInfo) {
@@ -33,6 +45,15 @@ public class OrderResource {
         return r;
     }
 
+    /**
+     * Creates an order for a given user ID query parameter and request body.
+     *
+     * @param userId  The user ID from user_id query param.
+     * @param body    The request payload body.
+     * @param uriInfo The URI info context.
+     * @return A map echoing the order creation details.
+     * @throws IOException if JSON parsing of the body fails.
+     */
     @POST
     @Produces(MediaType.APPLICATION_JSON)
     public Map<String, Object> create(@QueryParam("user_id") String userId, byte[] body,

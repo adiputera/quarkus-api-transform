@@ -12,20 +12,45 @@ import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.Map;
 
+/**
+ * Implementation of {@link BodyCodec} for handling {@code application/x-www-form-urlencoded} key-value bodies.
+ *
+ * @author Yusuf F. Adiputera
+ */
 @ApplicationScoped
 public class FormUrlEncodedBodyCodec implements BodyCodec {
 
+    /**
+     * Checks if this codec supports the given media type.
+     *
+     * @param contentType The media type to check.
+     * @return True if supported, false otherwise.
+     * @see BodyCodec#supports(MediaType)
+     */
     @Override
     public boolean supports(MediaType contentType) {
         return contentType != null
                 && MediaType.APPLICATION_FORM_URLENCODED_TYPE.isCompatible(contentType);
     }
 
+    /**
+     * Gets the canonical media type produced or handled by this codec.
+     *
+     * @return The canonical media type.
+     * @see BodyCodec#contentType()
+     */
     @Override
     public MediaType contentType() {
         return MediaType.APPLICATION_FORM_URLENCODED_TYPE;
     }
 
+    /**
+     * Parses raw body bytes into an intermediate flat {@link JsonNode} object representation.
+     *
+     * @param body The raw body bytes.
+     * @return The parsed intermediate document node.
+     * @see BodyCodec#parse(byte[])
+     */
     @Override
     public JsonNode parse(byte[] body) {
         ObjectNode root = JsonNodeFactory.instance.objectNode();
@@ -49,6 +74,13 @@ public class FormUrlEncodedBodyCodec implements BodyCodec {
         return root;
     }
 
+    /**
+     * Serializes an intermediate flat {@link JsonNode} object into URL-encoded form bytes.
+     *
+     * @param document The document node to serialize.
+     * @return The serialized byte array.
+     * @see BodyCodec#serialize(JsonNode)
+     */
     @Override
     public byte[] serialize(JsonNode document) {
         if (document == null || document.isMissingNode() || document.isNull()) {
@@ -82,11 +114,23 @@ public class FormUrlEncodedBodyCodec implements BodyCodec {
         return sb.toString().getBytes(StandardCharsets.UTF_8);
     }
 
+    /**
+     * Checks whether this codec supports nested JSON pointer paths.
+     *
+     * @return True if nested pointers are supported, false otherwise.
+     * @see BodyCodec#supportsNestedPointers()
+     */
     @Override
     public boolean supportsNestedPointers() {
         return false;
     }
 
+    /**
+     * Checks whether this codec supports structural wrap/unwrap transformations.
+     *
+     * @return True if wrap and unwrap are supported, false otherwise.
+     * @see BodyCodec#supportsWrapUnwrap()
+     */
     @Override
     public boolean supportsWrapUnwrap() {
         return false;

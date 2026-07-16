@@ -11,6 +11,7 @@ import id.adiputera.proxy.routing.RouteCompiler;
 import id.adiputera.proxy.routing.RouteMatcher;
 import id.adiputera.proxy.transform.RequestTransformer;
 import id.adiputera.proxy.transform.TransformOrchestrator;
+import id.adiputera.proxy.auth.BackendAuthResolver;
 import id.adiputera.proxy.transform.body.BodyCodecRegistry;
 import id.adiputera.proxy.transform.body.FormUrlEncodedBodyCodec;
 import id.adiputera.proxy.transform.body.JsonBodyCodec;
@@ -33,6 +34,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.absent;
@@ -54,6 +56,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ProxyServiceTest {
 
     private WireMockServer wireMock;
+    private BackendAuthResolver authResolver;
+    private ConfigSnapshot currentSnapshot;
 
     @BeforeEach
     void startWireMock() {
@@ -88,13 +92,18 @@ class ProxyServiceTest {
 
         ConfigProvider provider = Mockito.mock(ConfigProvider.class);
         Mockito.when(provider.current()).thenReturn(snapshot);
+        currentSnapshot = snapshot;
 
         RouteMatcher matcher = new RouteMatcher(provider);
         BodyCodecRegistry codecs = new BodyCodecRegistry(
                 List.of(new JsonBodyCodec(), new FormUrlEncodedBodyCodec()));
         TransformOrchestrator orchestrator = new TransformOrchestrator(codecs, new RequestTransformer());
 
-        return new ProxyService(matcher, orchestrator, provider);
+        authResolver = Mockito.mock(BackendAuthResolver.class);
+        Mockito.when(authResolver.authorizationHeader(Mockito.anyString(), Mockito.any()))
+                .thenReturn(Optional.empty());
+
+        return new ProxyService(matcher, orchestrator, provider, new ResponseHeaderRewriter(), authResolver);
     }
 
     private static RouteDefinition route(String id, String source, String target, List<String> methods,
@@ -445,6 +454,47 @@ class ProxyServiceTest {
                 "{\"a\":1}".getBytes(StandardCharsets.UTF_8));
 
         assertThat(new String((byte[]) response.getEntity(), StandardCharsets.UTF_8)).isEqualTo(responseBody);
+    }
+
+    @Test
+    void authHeaderInjectedWhenResolverReturnsToken() throws Exception {
+        ProxyService svc = proxyServiceFor(route("r", "/resource", "/api/resource", List.of("GET")));
+        Mockito.when(authResolver.authorizationHeader(Mockito.eq("test-api"), Mockito.any()))
+                .thenReturn(Optional.of("Bearer injected-jwt-token"));
+
+        wireMock.stubFor(get(urlEqualTo("/api/resource"))
+                .willReturn(aResponse().withStatus(200)));
+
+        svc.proxy("GET", uriInfo("/resource", Map.of()), headers(null, Map.of()), null);
+
+        wireMock.verify(anyRequestedFor(urlEqualTo("/api/resource"))
+                .withHeader("Authorization", equalTo("Bearer injected-jwt-token")));
+    }
+
+    @Test
+    void responseLocationHeaderRewrittenWhenBackendConfigured() throws Exception {
+        ProxyService svc = proxyServiceFor(route("r", "/auth/login", "/login", List.of("POST")));
+
+        wireMock.stubFor(post(urlEqualTo("/login"))
+                .willReturn(aResponse().withStatus(302)
+                        .withHeader("Location", wireMock.baseUrl() + "/dashboard?user=1")));
+
+        Response response = svc.proxy("POST", uriInfo("/auth/login", Map.of()), headers(null, Map.of()), null);
+
+        assertThat(response.getStatus()).isEqualTo(302);
+        assertThat(response.getHeaderString("Location")).isEqualTo("/dashboard?user=1");
+    }
+
+    @Test
+    void zeroBodyForGetDoesNotSetBody() throws Exception {
+        ProxyService svc = proxyServiceFor(route("r", "/test", "/api/test", List.of("GET")));
+        wireMock.stubFor(get(urlEqualTo("/api/test")).willReturn(aResponse().withStatus(200)));
+
+        Response response = svc.proxy("GET", uriInfo("/test", Map.of()), headers(null, Map.of()), new byte[0]);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        wireMock.verify(anyRequestedFor(urlEqualTo("/api/test"))
+                .withRequestBody(absent()));
     }
 
     // reference to avoid "unused import" warnings

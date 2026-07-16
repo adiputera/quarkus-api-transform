@@ -17,6 +17,11 @@ import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Sample authentication controller for echoing credentials, query params, and body in token requests.
+ *
+ * @author Yusuf F. Adiputera
+ */
 @Path("/auth/token")
 @ApplicationScoped
 public class AuthResource {
@@ -25,6 +30,16 @@ public class AuthResource {
 
     private final ObjectMapper mapper = new ObjectMapper();
 
+    /**
+     * Issues an authentication token and echoes request attributes.
+     *
+     * @param user        The username query parameter.
+     * @param body        The request payload body.
+     * @param uriInfo     The URI info context.
+     * @param httpHeaders The HTTP headers context.
+     * @return A map echoing request parameters, headers, and body.
+     * @throws IOException if JSON parsing of the body fails.
+     */
     @POST
     @Consumes(MediaType.WILDCARD)
     @Produces(MediaType.APPLICATION_JSON)

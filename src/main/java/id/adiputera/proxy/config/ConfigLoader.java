@@ -1,12 +1,18 @@
 package id.adiputera.proxy.config;
 
+import id.adiputera.proxy.model.AuthConfig;
 import id.adiputera.proxy.model.BackendDefinition;
+import id.adiputera.proxy.model.BasicAuth;
+import id.adiputera.proxy.model.Oauth2Auth;
 import id.adiputera.proxy.model.ParamTransform;
 import id.adiputera.proxy.model.RouteDefinition;
+import id.adiputera.proxy.persistence.AuthEntity;
 import id.adiputera.proxy.persistence.BackendEntity;
 import id.adiputera.proxy.persistence.BackendRepository;
+import id.adiputera.proxy.persistence.BasicEntity;
 import id.adiputera.proxy.persistence.GlobalsEntity;
 import id.adiputera.proxy.persistence.GlobalsRepository;
+import id.adiputera.proxy.persistence.Oauth2Entity;
 import id.adiputera.proxy.persistence.RouteEntity;
 import id.adiputera.proxy.persistence.RouteRepository;
 import id.adiputera.proxy.persistence.RouteTransformEntity;
@@ -24,6 +30,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Materializes a {@link ConfigSnapshot} from the current DB state.
+ *
+ * @author Yusuf F. Adiputera
+ */
 @ApplicationScoped
 public class ConfigLoader {
 
@@ -32,6 +43,14 @@ public class ConfigLoader {
     private final RouteRepository routeRepo;
     private final TransformValidator validator;
 
+    /**
+     * Constructs a new ConfigLoader.
+     *
+     * @param globalsRepo The repository for global settings.
+     * @param backendRepo The repository for backend entities.
+     * @param routeRepo   The repository for route entities.
+     * @param validator   The transform validator.
+     */
     public ConfigLoader(GlobalsRepository globalsRepo,
                         BackendRepository backendRepo,
                         RouteRepository routeRepo,
@@ -42,6 +61,13 @@ public class ConfigLoader {
         this.validator = validator;
     }
 
+    /**
+     * Reads globals, backends, routes, and transforms from the DB in a single
+     * transaction and materializes a fresh {@link ConfigSnapshot}.
+     *
+     * @return A new, immutable snapshot ready to be used.
+     * @throws IllegalStateException if the globals row is missing or validation fails.
+     */
     @Transactional
     public ConfigSnapshot load() {
         GlobalsEntity globals = globalsRepo.findByIdOptional((short) 1)
@@ -54,6 +80,7 @@ public class ConfigLoader {
             def.setBaseUrl(e.getBaseUrl());
             def.setConnectTimeout(e.getConnectTimeoutMs() != null ? e.getConnectTimeoutMs() : 0);
             def.setReadTimeout(e.getReadTimeoutMs() != null ? e.getReadTimeoutMs() : 0);
+            def.setAuth(mapAuth(e.getAuth()));
             backends.put(e.getId(), def);
         }
 
@@ -105,5 +132,26 @@ public class ConfigLoader {
                 globals.getConnectTimeoutMs(),
                 globals.getReadTimeoutMs()
         );
+    }
+
+    /**
+     * Maps a persisted {@link AuthEntity} to the domain {@link AuthConfig}.
+     *
+     * @param e The JPA auth entity, or null if no auth is configured.
+     * @return The domain auth config, or null if input is null.
+     */
+    private static AuthConfig mapAuth(AuthEntity e) {
+        if (e == null) {
+            return null;
+        }
+        if (e instanceof Oauth2Entity o) {
+            return new Oauth2Auth(o.getCode(), o.getUrl(), o.getClientId(), o.getClientSecret(),
+                    o.getScope(), o.getGrantType(), o.getOauth2Type());
+        }
+        if (e instanceof BasicEntity b) {
+            return new BasicAuth(b.getCode(), b.getUsername(), b.getPassword());
+        }
+        throw new IllegalStateException("Unknown auth type for code '" + e.getCode()
+                + "': " + e.getClass().getSimpleName());
     }
 }

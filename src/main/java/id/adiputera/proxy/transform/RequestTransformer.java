@@ -7,9 +7,23 @@ import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Transformer component constructing target backend URLs from path variables and query parameters.
+ *
+ * @author Yusuf F. Adiputera
+ */
 @ApplicationScoped
 public class RequestTransformer {
 
+    /**
+     * Builds a complete target URI by substituting path variables and appending query parameters.
+     *
+     * @param backendBaseUrl The base URL of the target backend.
+     * @param targetTemplate The URI template for the target endpoint.
+     * @param pathVariables  The path variable replacements extracted from the route match.
+     * @param queryParams    The query parameters to append.
+     * @return The constructed target URI.
+     */
     public URI buildTargetUrl(String backendBaseUrl,
                               String targetTemplate,
                               Map<String, String> pathVariables,

@@ -49,7 +49,7 @@ class TransformValidatorTest {
         RouteDefinition route = route("r", "/x", tx("header:", "query:x"));
         assertThatThrownBy(() -> validator.validate(List.of(route)))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("header name must not be empty");
+                .hasMessageContaining("'from' header name is empty");
     }
 
     @Test
@@ -57,7 +57,7 @@ class TransformValidatorTest {
         RouteDefinition route = route("r", "/x", tx("query:x", "header:"));
         assertThatThrownBy(() -> validator.validate(List.of(route)))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("header name must not be empty");
+                .hasMessageContaining("'to' header name is empty");
     }
 
     @Test

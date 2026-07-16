@@ -14,12 +14,25 @@ import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Sample V2 product resource for testing payload wrapping and transformation.
+ *
+ * @author Yusuf F. Adiputera
+ */
 @Path("/v2/products")
 @ApplicationScoped
 public class V2ProductResource {
 
     private final ObjectMapper mapper = new ObjectMapper();
 
+    /**
+     * Creates a product from the given request body.
+     *
+     * @param body    The raw request body.
+     * @param uriInfo The URI info context.
+     * @return A map echoing the path, query parameters, and parsed body.
+     * @throws IOException if JSON parsing of the body fails.
+     */
     @POST
     @Produces(MediaType.APPLICATION_JSON)
     public Map<String, Object> create(byte[] body, @Context UriInfo uriInfo) throws IOException {

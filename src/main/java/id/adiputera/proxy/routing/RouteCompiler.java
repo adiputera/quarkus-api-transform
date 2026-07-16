@@ -7,10 +7,24 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.regex.Pattern;
 
+/**
+ * Utility compiler converting {@link RouteDefinition} instances into optimized {@link RouteMatcher.CompiledRoute} structures.
+ *
+ * @author Yusuf F. Adiputera
+ */
 public final class RouteCompiler {
 
+    /**
+     * Private constructor to prevent instantiation of utility class.
+     */
     private RouteCompiler() {}
 
+    /**
+     * Compiles and sorts a list of route definitions by specificity and wildcard precedence.
+     *
+     * @param routes The raw route definitions.
+     * @return The sorted list of compiled routes.
+     */
     public static List<RouteMatcher.CompiledRoute> compile(List<RouteDefinition> routes) {
         List<RouteMatcher.CompiledRoute> compiled = new ArrayList<>(routes.size());
         for (RouteDefinition route : routes) {
@@ -23,6 +37,13 @@ public final class RouteCompiler {
         return compiled;
     }
 
+    /**
+     * Compiles a single route definition into a regex pattern and variable metadata.
+     *
+     * @param route The route definition to compile.
+     * @return The compiled route representation.
+     * @throws IllegalStateException if the source pattern syntax is malformed.
+     */
     private static RouteMatcher.CompiledRoute compileOne(RouteDefinition route) {
         String source = route.getSource();
         boolean wildcard = false;

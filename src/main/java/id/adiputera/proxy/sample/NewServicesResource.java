@@ -15,10 +15,22 @@ import jakarta.ws.rs.core.UriInfo;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Sample resource providing echo endpoints for testing HTTP methods and sub-path forwarding.
+ *
+ * @author Yusuf F. Adiputera
+ */
 @Path("/api/new-services")
 @ApplicationScoped
 public class NewServicesResource {
 
+    /**
+     * Echoes back details of a GET request.
+     *
+     * @param rest    The sub-path captured from the request URL.
+     * @param uriInfo The URI info context.
+     * @return A map containing request details.
+     */
     @GET
     @Path("/{rest:.*}")
     @Produces(MediaType.APPLICATION_JSON)
@@ -26,6 +38,13 @@ public class NewServicesResource {
         return echo("GET", rest, uriInfo);
     }
 
+    /**
+     * Echoes back details of a POST request.
+     *
+     * @param rest    The sub-path captured from the request URL.
+     * @param uriInfo The URI info context.
+     * @return A map containing request details.
+     */
     @POST
     @Path("/{rest:.*}")
     @Produces(MediaType.APPLICATION_JSON)
@@ -33,6 +52,13 @@ public class NewServicesResource {
         return echo("POST", rest, uriInfo);
     }
 
+    /**
+     * Echoes back details of a PUT request.
+     *
+     * @param rest    The sub-path captured from the request URL.
+     * @param uriInfo The URI info context.
+     * @return A map containing request details.
+     */
     @PUT
     @Path("/{rest:.*}")
     @Produces(MediaType.APPLICATION_JSON)
@@ -40,6 +66,13 @@ public class NewServicesResource {
         return echo("PUT", rest, uriInfo);
     }
 
+    /**
+     * Echoes back details of a DELETE request.
+     *
+     * @param rest    The sub-path captured from the request URL.
+     * @param uriInfo The URI info context.
+     * @return A map containing request details.
+     */
     @DELETE
     @Path("/{rest:.*}")
     @Produces(MediaType.APPLICATION_JSON)
@@ -47,6 +80,14 @@ public class NewServicesResource {
         return echo("DELETE", rest, uriInfo);
     }
 
+    /**
+     * Formats the request attributes into a map structure.
+     *
+     * @param method  The HTTP method name.
+     * @param rest    The sub-path string.
+     * @param uriInfo The URI info context.
+     * @return A map of attributes.
+     */
     private static Map<String, Object> echo(String method, String rest, UriInfo uriInfo) {
         Map<String, Object> r = new LinkedHashMap<>();
         r.put("method", method);

@@ -9,6 +9,11 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
+/**
+ * JPA entity representing a parameter transformation rule attached to a route in the {@code proxy_route_transforms} table.
+ *
+ * @author Yusuf F. Adiputera
+ */
 @Getter
 @Setter
 @Entity

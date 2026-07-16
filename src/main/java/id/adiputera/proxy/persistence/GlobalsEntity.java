@@ -7,6 +7,11 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
+/**
+ * JPA entity representing global proxy settings (timeouts and headers) in the {@code proxy_globals} table.
+ *
+ * @author Yusuf F. Adiputera
+ */
 @Getter
 @Setter
 @Entity

@@ -53,3 +53,5 @@ replay_pid*
 .env
 .env.local
 application-local.properties
+.agentwork/
+.agents/

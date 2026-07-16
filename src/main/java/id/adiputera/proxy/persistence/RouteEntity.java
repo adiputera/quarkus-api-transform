@@ -15,6 +15,11 @@ import lombok.Setter;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * JPA entity representing a proxy route definition in the {@code proxy_routes} table.
+ *
+ * @author Yusuf F. Adiputera
+ */
 @Getter
 @Setter
 @Entity

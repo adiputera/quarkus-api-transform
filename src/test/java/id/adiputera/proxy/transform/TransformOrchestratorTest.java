@@ -223,8 +223,7 @@ class TransformOrchestratorTest {
         TransformOrchestrator.Result r = apply(route, Map.of(),
                 Map.of("token", new String[]{"abc123"}), null, null);
 
-        assertThat(r.addHeaders()).containsEntry("Authorization", "abc123");
-        assertThat(r.removeHeaders()).contains("authorization");
+        assertThat(r.forwardHeaders()).containsEntry("Authorization", List.of("abc123"));
         assertThat(r.targetUri().toString()).isEqualTo("https://be.test/auth/token");
     }
 
@@ -235,8 +234,7 @@ class TransformOrchestratorTest {
         TransformOrchestrator.Result r = apply(route,
                 Map.of("userId", "42"), Map.of(), null, null);
 
-        assertThat(r.addHeaders()).containsEntry("X-User-Id", "42");
-        assertThat(r.removeHeaders()).contains("x-user-id");
+        assertThat(r.forwardHeaders()).containsEntry("X-User-Id", List.of("42"));
         assertThat(r.targetUri().toString()).isEqualTo("https://be.test/auth/token");
     }
 
@@ -249,8 +247,7 @@ class TransformOrchestratorTest {
                 "{\"apiKey\":\"secret\",\"name\":\"A\"}".getBytes(StandardCharsets.UTF_8),
                 MediaType.APPLICATION_JSON_TYPE);
 
-        assertThat(r.addHeaders()).containsEntry("X-API-Key", "secret");
-        assertThat(r.removeHeaders()).contains("x-api-key");
+        assertThat(r.forwardHeaders()).containsEntry("X-API-Key", List.of("secret"));
         assertThat(new String(r.forwardBody(), StandardCharsets.UTF_8))
                 .isEqualTo("{\"name\":\"A\"}");
     }
@@ -263,7 +260,7 @@ class TransformOrchestratorTest {
                 Map.of("X-Search", java.util.List.of("shoes")));
 
         assertThat(r.targetUri().toString()).isEqualTo("https://be.test/search?q=shoes");
-        assertThat(r.removeHeaders()).contains("x-search");
+        assertThat(r.forwardHeaders()).doesNotContainKey("X-Search");
     }
 
     @Test
@@ -274,6 +271,7 @@ class TransformOrchestratorTest {
                 Map.of("X-Search", java.util.List.of("shoes")));
 
         assertThat(r.targetUri().toString()).isEqualTo("https://be.test/search?q=shoes");
+        assertThat(r.forwardHeaders()).doesNotContainKey("X-Search");
     }
 
     @Test
@@ -284,7 +282,7 @@ class TransformOrchestratorTest {
                 Map.of("X-User-Id", java.util.List.of("42")));
 
         assertThat(r.targetUri().toString()).isEqualTo("https://be.test/users/42");
-        assertThat(r.removeHeaders()).contains("x-user-id");
+        assertThat(r.forwardHeaders()).doesNotContainKey("X-User-Id");
     }
 
     @Test
@@ -298,7 +296,7 @@ class TransformOrchestratorTest {
 
         assertThat(new String(r.forwardBody(), StandardCharsets.UTF_8))
                 .isEqualTo("{\"trace\":{\"id\":\"t-99\"}}");
-        assertThat(r.removeHeaders()).contains("x-trace-id");
+        assertThat(r.forwardHeaders()).doesNotContainKey("X-Trace-Id");
     }
 
     @Test
@@ -308,8 +306,8 @@ class TransformOrchestratorTest {
         TransformOrchestrator.Result r = apply(route, Map.of(), Map.of(), null, null,
                 Map.of("X-Legacy-Token", java.util.List.of("bearer-xyz")));
 
-        assertThat(r.addHeaders()).containsEntry("Authorization", "bearer-xyz");
-        assertThat(r.removeHeaders()).contains("x-legacy-token", "authorization");
+        assertThat(r.forwardHeaders()).containsEntry("Authorization", List.of("bearer-xyz"));
+        assertThat(r.forwardHeaders()).doesNotContainKey("X-Legacy-Token");
     }
 
     @Test
@@ -319,7 +317,28 @@ class TransformOrchestratorTest {
         TransformOrchestrator.Result r = apply(route, Map.of(), Map.of(), null, null, Map.of());
 
         assertThat(r.targetUri().toString()).isEqualTo("https://be.test/auth/token");
-        assertThat(r.removeHeaders()).contains("x-api-key");
+        assertThat(r.forwardHeaders()).doesNotContainKey("X-API-Key");
+    }
+
+    @Test
+    void headerDrop() {
+        RouteDefinition route = route("r", "/products", txDrop("header:X-Debug"));
+        TransformOrchestrator.Result r = apply(route, Map.of(), Map.of(), null, null,
+                Map.of("X-Debug", java.util.List.of("true"), "X-Keep", java.util.List.of("1")));
+
+        assertThat(r.forwardHeaders()).doesNotContainKey("X-Debug");
+        assertThat(r.forwardHeaders()).containsEntry("X-Keep", List.of("1"));
+    }
+
+    @Test
+    void headerMultiValuePreservedOnRename() {
+        RouteDefinition route = route("r", "/products",
+                tx("header:X-Forwarded-For", "header:X-Original-Forwarded-For"));
+        TransformOrchestrator.Result r = apply(route, Map.of(), Map.of(), null, null,
+                Map.of("X-Forwarded-For", java.util.List.of("client1", "proxy1")));
+
+        assertThat(r.forwardHeaders()).containsEntry("X-Original-Forwarded-For", List.of("client1", "proxy1"));
+        assertThat(r.forwardHeaders()).doesNotContainKey("X-Forwarded-For");
     }
 
     @Test

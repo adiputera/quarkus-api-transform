@@ -10,21 +10,54 @@ import jakarta.enterprise.context.ApplicationScoped;
 
 import java.util.List;
 
+/**
+ * Validates route configuration before it becomes active.
+ *
+ * <p>Enforces:</p>
+ * <ol>
+ *   <li>{@code from} is present on every transform.</li>
+ *   <li>Dropping ({@code to} omitted) is only legal when {@code from} is a {@code body:} or {@code header:} reference.</li>
+ *   <li>Every {@code body:} pointer parses as valid RFC 6901.</li>
+ *   <li>Every {@code header:} name is non-empty and contains only RFC 7230 token characters.</li>
+ *   <li>Every {@code path:} target has a matching {@code {name}} placeholder in the route's target template.</li>
+ *   <li>Features the codec can't represent (nested pointer, wrap/unwrap on form-urlencoded)
+ *       are rejected unless capable {@code produces} is declared.</li>
+ * </ol>
+ *
+ * @author Yusuf F. Adiputera
+ */
 @ApplicationScoped
 public class TransformValidator {
 
     private final BodyCodecRegistry codecs;
 
+    /**
+     * Constructs a new TransformValidator.
+     *
+     * @param codecs The body codec registry used to check output capabilities.
+     */
     public TransformValidator(BodyCodecRegistry codecs) {
         this.codecs = codecs;
     }
 
+    /**
+     * Validates every route in the candidate list. Throws on the first problem encountered.
+     *
+     * @param routes Candidate routes to validate.
+     * @throws IllegalStateException on any rule violation.
+     */
     public void validate(List<RouteDefinition> routes) {
         for (RouteDefinition route : routes) {
             validateRoute(route);
         }
     }
 
+    /**
+     * Validates an individual route and all of its declared parameter transformations.
+     *
+     * @param route The route definition to validate.
+     * @throws IllegalStateException if any transform or target template is invalid.
+     */
     private void validateRoute(RouteDefinition route) {
         BodyCodec declaredOutputCodec = null;
         if (route.getProduces() != null && !route.getProduces().isBlank()) {
@@ -42,17 +75,9 @@ public class TransformValidator {
             Location fromLoc = t.getFromLocation();
             Location toLoc = t.getToLocation();
 
-            if (t.isDrop() && fromLoc != Location.BODY) {
+            if (t.isDrop() && fromLoc != Location.BODY && fromLoc != Location.HEADER) {
                 throw new IllegalStateException(
-                        ref + ": 'to' may only be omitted when 'from' is a body reference");
-            }
-
-            if (fromLoc == Location.HEADER && (t.getFromName() == null || t.getFromName().isBlank())) {
-                throw new IllegalStateException(ref + ": 'from' header name must not be empty");
-            }
-            if (!t.isDrop() && toLoc == Location.HEADER
-                    && (t.getToName() == null || t.getToName().isBlank())) {
-                throw new IllegalStateException(ref + ": 'to' header name must not be empty");
+                        ref + ": 'to' may only be omitted when 'from' is a body or header reference");
             }
 
             boolean usesNested = false;
@@ -79,6 +104,13 @@ public class TransformValidator {
                 }
                 if (ptr.isEmpty()) usesRoot = true;
                 else if (ptr.indexOf('/', 1) >= 0) usesNested = true;
+            }
+
+            if (fromLoc == Location.HEADER) {
+                validateHeaderName(ref, "from", t.getFromName());
+            }
+            if (!t.isDrop() && toLoc == Location.HEADER) {
+                validateHeaderName(ref, "to", t.getToName());
             }
 
             if (!t.isDrop() && toLoc == Location.PATH) {
@@ -112,10 +144,40 @@ public class TransformValidator {
         }
     }
 
+    /**
+     * Normalizes a raw JSON Pointer string so that it starts with a leading slash,
+     * or is empty for the root reference (`/` or `""`).
+     *
+     * @param raw The raw JSON Pointer string.
+     * @return The normalized pointer string.
+     */
     static String normalizePointer(String raw) {
         if (raw == null || raw.isEmpty() || raw.equals("/")) {
             return "";
         }
         return raw.startsWith("/") ? raw : "/" + raw;
+    }
+
+    /**
+     * Enforces RFC 7230 token grammar on header names: non-empty, no whitespace or
+     * control characters, and none of {@code "(),/:;<=>?@[\]{}}. Catches operator
+     * typos at reload time.
+     *
+     * @param ref  The context reference string for error messages.
+     * @param side Whether validating the "from" or "to" side.
+     * @param name The candidate header name.
+     * @throws IllegalStateException if the header name violates RFC 7230 grammar.
+     */
+    private static void validateHeaderName(String ref, String side, String name) {
+        if (name == null || name.isEmpty()) {
+            throw new IllegalStateException(ref + ": '" + side + "' header name is empty");
+        }
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (c <= 0x20 || c >= 0x7F || "()<>@,;:\\\"/[]?={}".indexOf(c) >= 0) {
+                throw new IllegalStateException(ref + ": '" + side + "' header name '" + name
+                        + "' contains invalid character '" + c + "' (RFC 7230 token)");
+            }
+        }
     }
 }

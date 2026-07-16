@@ -8,10 +8,22 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.net.http.HttpTimeoutException;
 
+/**
+ * Exception mapper converting {@link HttpTimeoutException} into a 504 Gateway Timeout response.
+ *
+ * @author Yusuf F. Adiputera
+ */
 @Slf4j
 @Provider
 public class HttpTimeoutExceptionMapper implements ExceptionMapper<HttpTimeoutException> {
 
+    /**
+     * Maps an HTTP timeout exception to a 504 Gateway Timeout response.
+     *
+     * @param ex The timeout exception.
+     * @return A 504 HTTP response containing the error details.
+     * @see ExceptionMapper#toResponse(Throwable)
+     */
     @Override
     public Response toResponse(HttpTimeoutException ex) {
         log.error("Backend request timed out: {}", ex.getMessage());

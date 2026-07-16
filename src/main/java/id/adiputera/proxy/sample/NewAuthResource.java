@@ -15,12 +15,26 @@ import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Sample authentication controller for testing API key and body token extraction in V2 auth flow.
+ *
+ * @author Yusuf F. Adiputera
+ */
 @Path("/auth/v2/token")
 @ApplicationScoped
 public class NewAuthResource {
 
     private final ObjectMapper mapper = new ObjectMapper();
 
+    /**
+     * Issues an authentication token for the given API key, authorization, and payload body.
+     *
+     * @param apiKey        The API key extracted from X-API-Key header.
+     * @param authorization The Authorization header value.
+     * @param body          The raw request payload body.
+     * @return A Response containing JSON token payload on success, or 401 Unauthorized on failure.
+     * @throws IOException if JSON parsing fails on body bytes.
+     */
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
